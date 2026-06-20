@@ -117,4 +117,6 @@ class Settings(BaseSettings):
     celery: CelerySettings = CelerySettings()
 
 
+    max_retries_before_failed: int = 2
+
 settings = Settings()
