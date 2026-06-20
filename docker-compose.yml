@@ -1,0 +1,84 @@
+version: '3.8'
+networks:
+  dev:
+
+
+services:
+  app:
+    build: .
+    ports:
+      - 8000:8000
+    networks:
+      - dev
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres
+    env_file:
+      - .env
+    ports:
+      - ${PGPORT}:${PGPORT} # замечание: чтобы docker-compose увидел переменную PGPORT, нужно указать ее в файле .env, который должен находиться в той же папке, что и docker-compose.yml
+    volumes:
+    - auth_bd_data:/var/lib/postgresql/data
+    networks:
+      - dev
+
+  redis:
+    image: redis:7
+    ports:
+      - 6379:6379
+    networks:
+      - dev
+  
+  redis_gui:
+    image: redis/redisinsight
+    ports:
+      - 5540:5540
+    networks:
+      - dev
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - 5672:5672
+      - 15672:15672
+    networks:
+      - dev
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+  
+  celery_worker:
+    build: .
+    command: uv run celery --app src.core.celery worker --loglevel=info
+    env_file:
+      - .env
+    networks:
+      - dev
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  
+  celery_beat:
+    build: .
+    command: uv run celery --app src.core.celery beat --loglevel=info
+    env_file:
+      - .env
+    networks:
+      - dev
+    depends_on:
+      rabbitmq:
+        condition: service_started
+
+volumes:  # указание глобального тома где-то в папках докера, чтобы не мозолила глаза
+  auth_bd_data:
+  rabbitmq_data:
