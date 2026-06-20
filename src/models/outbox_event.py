@@ -32,3 +32,4 @@ class OutboxEvent(Base):
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    attempts: Mapped[int] = mapped_column(default=0)
