@@ -7,7 +7,7 @@ from src.schemas.base import Base
 class Opponent(Base):
     id: int
     name: str
-    acronym: str | None
+    acronym: str | None = None
     image_url: str | None
 
 

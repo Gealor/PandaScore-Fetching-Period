@@ -20,3 +20,4 @@ COPY . /app
 RUN uv sync --locked
 
 CMD ["uv", "run", "src/main.py"]
+# CMD ["uv", "run", "src/main_consumer.py"]

@@ -13,7 +13,7 @@ def prepare_celery() -> Celery:
         ],
     )
     celery.conf.beat_schedule = {
-        "cleanup_expired_tokens": {
+        "fetch_matches": {
             "task": "src.tasks.pandascore_fetch.fetch_matches",
             "schedule": settings.celery.cron_tab,
         }

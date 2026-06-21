@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -75,8 +76,7 @@ class CelerySettings(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     countdown_seconds: int = 10
-    max_retries: int = 5
-    cron_tab: crontab = crontab(minute=0, hour="*")  # каждый час в 00 минут
+    cron_tab: crontab = crontab(minute=00, hour="*")  # каждый час в 00 минут
 
 
 class LoggerSettings(BaseModel):
@@ -95,6 +95,7 @@ class ExternalApiSettings(BaseSettings):
     api_token: Annotated[str, Field(alias="PANDASCORE_API_TOKEN")]
     base_url: str = "https://api.pandascore.co"
     timeout_seconds: int = 30
+    per_page: int = 100
 
 
 class Settings(BaseSettings):
@@ -121,7 +122,13 @@ class Settings(BaseSettings):
 
     api: ExternalApiSettings = Field(default_factory=ExternalApiSettings)
 
-    max_retries_before_failed: int = 2
+
+    max_attempts: int = 5
+    cursor_overlap: timedelta = timedelta(minutes=5)
+    cursor_name: str = "pandascore_matches"
+    exchange_name: Annotated[str, Field(alias="EXCHANGE_NAME")]
+    routing_key: Annotated[str, Field(alias="ROUTING_KEY")]
+    
 
 
 settings = Settings()

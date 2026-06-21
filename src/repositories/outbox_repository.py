@@ -74,7 +74,7 @@ class OutboxEventRepository:
         return event
 
     async def register_failed_attempt(
-        self, event_id: int, max_attempts: int = 5
+        self, event_id: int, max_attempts: int = settings.max_attempts
     ) -> OutboxEvent:
         event = await self.get_by_id(event_id)
         if event is None:

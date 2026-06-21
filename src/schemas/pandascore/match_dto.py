@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Literal
 
+from pydantic import AliasChoices
 from pydantic import Field
 
-from schemas.pandascore.streams import Stream
 from src.schemas.base import Base
+from src.schemas.pandascore.streams import Stream
 
 from .league_and_tournament import League
 from .league_and_tournament import Tournament
@@ -15,7 +16,7 @@ from .videogame import Videogame
 
 
 class MatchPostDTO(Base):
-    external_id: int = Field(alias="id")
+    external_id: int = Field(validation_alias=AliasChoices("id", "external_id"))
     external_source: str = "pandascore"
     slug: str
     status: Literal["not_started", "running", "finished", "canceled", "postponed"]
@@ -28,7 +29,7 @@ class MatchPostDTO(Base):
     opponents: list[Opponents]
     winner_id: int | None
     results: list[PlayerResult | TeamResult]
-    streams: list[Stream]
+    streams_list: list[Stream]
     modified_at: datetime     # для версионности при upsert
 
 

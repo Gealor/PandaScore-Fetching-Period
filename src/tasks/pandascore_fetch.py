@@ -1,8 +1,9 @@
+import asyncio
+
 from src.core.celery import celery
-from src.core.database import async_session_maker
-from src.core.logger import log
+from src.services.aggregate_matches import process_matches
 
 
 @celery.task
 def fetch_matches():
-    log.info("Получение данных")
+    asyncio.run(process_matches())

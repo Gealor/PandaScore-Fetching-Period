@@ -14,7 +14,7 @@ from .make_request import make_request
 async def get_list_matches(
     aiohttp_session: ClientSession,
     url: str = f"{settings.api.base_url}/matches",
-    per_page: int = 100,
+    per_page: int = settings.api.per_page,
     page: int = 1,
 ) -> list[dict[str, Any]]:
     headers = {"Authorization": f"Bearer {settings.api.api_token}"}
