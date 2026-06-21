@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
@@ -94,7 +95,7 @@ async def fetch_and_store_new_matches(
     else:
         log.info("No new matches found.")
 
-
+# TODO: сделать так, что если ошибка случилась по вине инфраструктуры (упал брокер или что-то такое), то мы НЕ инкрементируем попытки, а просто логируем критическим уровнем и прерываем задачу полностью
 async def publish_pending_events(
     channel: aio_pika.abc.AbstractChannel,
     exchange: aio_pika.abc.AbstractExchange,
@@ -119,8 +120,24 @@ async def publish_pending_events(
                     await publish_match(channel, exchange, match)
                     await uow.outbox_repo.mark_sent(event.id)
                     total_published += 1
-                except Exception as e:
-                    log.warning("Publish failed for event_id=%s: %s", event.id, e)
+                except ValidationError as e:
+                    log.error("Permanent data validation error for event_id=%s: %s. Marking attempt.", event.id, e)
+                    await uow.outbox_repo.register_failed_attempt(
+                        event.id, settings.max_attempts
+                    )
+                except (
+                    aio_pika.exceptions.AMQPError,  # Базовый класс для всех ошибок aio-pika (ConnectionClosed, ChannelClosed)
+                    IOError,                        # Ошибки ввода-вывода (включая ConnectionResetError, BrokenPipeError)
+                    OSError,                        # Системные ошибки сокетов
+                    asyncio.TimeoutError,           # Таймаут ожидания подтверждения публикации
+                ) as net_err:
+                    log.critical(
+                        "Infrastructure error (RabbitMQ/Network) during publish: %s. Aborting entire job.",
+                        net_err
+                    )
+                    raise
+                except Exception as app_exc:
+                    log.warning("Publish failed for event_id=%s: %s", event.id, app_exc)
                     await uow.outbox_repo.register_failed_attempt(
                         event.id, settings.max_attempts
                     )
