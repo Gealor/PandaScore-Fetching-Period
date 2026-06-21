@@ -9,7 +9,7 @@ from src.core.logger import log
 RABBITMQ_URL = settings.rabbitmq.rabbitmq_url
 EXCHANGE_NAME = settings.exchange_name
 ROUTING_KEY = settings.routing_key
-QUEUE_NAME = "test_matches_queue"          # Имя очереди для проверки
+QUEUE_NAME = "test_matches_queue"  # Имя очереди для проверки
 OUTPUT_FILE = "consumed_matches.jsonl"
 
 
@@ -40,7 +40,9 @@ async def main():
         # 3. Привязываем очередь к Exchange по routing_key
         await queue.bind(exchange, routing_key=ROUTING_KEY)
 
-        log.info(f"[*] Ждем сообщений из очереди '{QUEUE_NAME}'. Для выхода нажмите CTRL+C")
+        log.info(
+            f"[*] Ждем сообщений из очереди '{QUEUE_NAME}'. Для выхода нажмите CTRL+C"
+        )
         log.info(f"[*] Данные будут записываться в файл: {OUTPUT_FILE}")
 
         # 4. Начинаем слушать очередь
