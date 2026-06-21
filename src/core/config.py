@@ -122,13 +122,11 @@ class Settings(BaseSettings):
 
     api: ExternalApiSettings = Field(default_factory=ExternalApiSettings)
 
-
     max_attempts: int = 5
     cursor_overlap: timedelta = timedelta(minutes=5)
     cursor_name: str = "pandascore_matches"
     exchange_name: Annotated[str, Field(alias="EXCHANGE_NAME")]
     routing_key: Annotated[str, Field(alias="ROUTING_KEY")]
-    
 
 
 settings = Settings()
