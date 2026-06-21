@@ -32,13 +32,11 @@ class CursorRepository:
         self.db_session.add(cursor)
 
         try:
-            await self.db_session.commit()
+            await self.db_session.flush()
         except IntegrityError as e:
-            await self.db_session.rollback()
             log.error("Failed to add cursor: %s", e)
             raise DatabaseException from e
 
-        await self.db_session.refresh(cursor)
         log.info(
             "Cursor created with name=%s: %s", cursor.job_name, cursor.last_modified_at
         )
@@ -52,18 +50,15 @@ class CursorRepository:
             .returning(Cursor)
         )
 
-        cursor = await self.db_session.scalar(stmt)
-        if cursor is None:
-            raise CursorNotFoundException
-
         try:
-            await self.db_session.commit()
+            cursor = await self.db_session.scalar(stmt)
         except IntegrityError as e:
-            await self.db_session.rollback()
             log.error("Failed to update cursor: %s", e)
             raise DatabaseException from e
 
-        await self.db_session.refresh(cursor)
+        if cursor is None:
+            raise CursorNotFoundException
+
         log.info(
             "Update cursor with name=%s: %s", cursor.job_name, cursor.last_modified_at
         )
@@ -75,9 +70,8 @@ class CursorRepository:
         await self.db_session.execute(stmt)
 
         try:
-            await self.db_session.commit()
+            await self.db_session.flush()
         except IntegrityError as e:
-            await self.db_session.rollback()
             log.error("Failed to delete cursor: %s", e)
             raise DatabaseException from e
 

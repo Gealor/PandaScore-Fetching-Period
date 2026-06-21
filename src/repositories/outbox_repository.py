@@ -25,7 +25,7 @@ class OutboxEventRepository:
         return await self.db_session.scalar(stmt)
 
     async def get_retriable_events(
-        self, max_attempts: int = settings.max_retries_before_failed, limit: int = 100
+        self, max_attempts: int = settings.max_attempts, limit: int = 100
     ) -> Sequence[OutboxEvent]:
         stmt = (
             select(OutboxEvent)
@@ -44,9 +44,8 @@ class OutboxEventRepository:
         self.db_session.add(event)
 
         try:
-            await self.db_session.commit()
+            await self.db_session.flush()
         except IntegrityError as e:
-            await self.db_session.rollback()
             log.error("Failed to create outbox event: %s", e)
             raise DatabaseException from e
 
@@ -62,18 +61,15 @@ class OutboxEventRepository:
             .returning(OutboxEvent)
         )
 
-        event = await self.db_session.scalar(stmt)
-        if event is None:
-            raise OutboxEventNotFoundException
-
         try:
-            await self.db_session.commit()
+            event = await self.db_session.scalar(stmt)
         except IntegrityError as e:
-            await self.db_session.rollback()
             log.error("Failed to mark outbox event as sent: %s", e)
             raise DatabaseException from e
 
-        await self.db_session.refresh(event)
+        if event is None:
+            raise OutboxEventNotFoundException
+
         log.info("Outbox event marked as sent: id=%s", event.id)
         return event
 
@@ -95,13 +91,11 @@ class OutboxEventRepository:
             )
 
         try:
-            await self.db_session.commit()
+            await self.db_session.flush()
         except IntegrityError as e:
-            await self.db_session.rollback()
             log.error("Failed to update outbox event attempt: %s", e)
             raise DatabaseException from e
 
-        await self.db_session.refresh(event)
         return event
 
     async def delete_sent_before(self, before: datetime) -> int:
@@ -114,12 +108,9 @@ class OutboxEventRepository:
             .returning(OutboxEvent.id)
         )
 
-        result = (await self.db_session.scalars(stmt)).all()
-
         try:
-            await self.db_session.commit()
+            result = (await self.db_session.scalars(stmt)).all()
         except IntegrityError as e:
-            await self.db_session.rollback()
             log.error("Failed to cleanup sent outbox events: %s", e)
             raise DatabaseException from e
 
