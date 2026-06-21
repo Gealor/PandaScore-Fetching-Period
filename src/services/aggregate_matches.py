@@ -68,7 +68,7 @@ async def fetch_and_store_new_matches(
             if not match:
                 continue
 
-            if match.modified_at <= fetch_since:
+            if match.modified_at <= fetch_since: # Нашли запись, которая старше курсора
                 reached_old_data = True
                 break
 
@@ -80,7 +80,7 @@ async def fetch_and_store_new_matches(
             if match.modified_at > max_modified:
                 max_modified = match.modified_at
 
-        if len(batch) < settings.api.per_page:
+        if len(batch) < settings.api.per_page: # последняя страница
             break
 
         page += 1
