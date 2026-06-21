@@ -14,6 +14,7 @@ from src.core.database import async_session_maker
 from src.core.logger import log
 from src.core.uow import UnitOfWork
 from src.integrations.pandascore_api import get_list_matches
+from src.models.outbox_event import OutboxEvent
 from src.schemas.pandascore.match_dto import MatchPostDTO
 from src.utils.publish_event import get_exchange
 from src.utils.publish_event import publish_match
@@ -95,7 +96,44 @@ async def fetch_and_store_new_matches(
     else:
         log.info("No new matches found.")
 
-# TODO: сделать так, что если ошибка случилась по вине инфраструктуры (упал брокер или что-то такое), то мы НЕ инкрементируем попытки, а просто логируем критическим уровнем и прерываем задачу полностью
+
+async def publish_one_event(
+    channel: aio_pika.abc.AbstractChannel,
+    exchange: aio_pika.abc.AbstractExchange,
+    uow: UnitOfWork,
+    event: OutboxEvent
+) -> bool:
+    try:
+        match = MatchPostDTO.model_validate(event.payload)
+        await publish_match(channel, exchange, match)
+        await uow.outbox_repo.mark_sent(event.id)
+    except ValidationError as e:
+        log.error("Permanent data validation error for event_id=%s: %s. Marking attempt.", event.id, e)
+        await uow.outbox_repo.register_failed_attempt(
+            event.id, settings.max_attempts
+        )
+        return False
+    except (
+        aio_pika.exceptions.AMQPError,  # Базовый класс для всех ошибок aio-pika (ConnectionClosed, ChannelClosed)
+        IOError,                        # Ошибки ввода-вывода (включая ConnectionResetError, BrokenPipeError)
+        OSError,                        # Системные ошибки сокетов
+        asyncio.TimeoutError,           # Таймаут ожидания подтверждения публикации
+    ) as net_err:
+        log.critical(
+            "Infrastructure error (RabbitMQ/Network) during publish: %s. Aborting entire job.",
+            net_err
+        )
+        raise
+    except Exception as app_exc:
+        log.warning("Publish failed for event_id=%s: %s", event.id, app_exc)
+        await uow.outbox_repo.register_failed_attempt(
+            event.id, settings.max_attempts
+        )
+        return False
+
+    return True
+
+# (СДЕЛАНО) TODO: сделать так, что если ошибка случилась по вине инфраструктуры (упал брокер или что-то такое), то мы НЕ инкрементируем попытки, а просто логируем критическим уровнем и прерываем задачу полностью
 async def publish_pending_events(
     channel: aio_pika.abc.AbstractChannel,
     exchange: aio_pika.abc.AbstractExchange,
@@ -115,32 +153,14 @@ async def publish_pending_events(
             log.info("Publishing batch of %d pending events...", len(pending_events))
 
             for event in pending_events:
-                try:
-                    match = MatchPostDTO.model_validate(event.payload)
-                    await publish_match(channel, exchange, match)
-                    await uow.outbox_repo.mark_sent(event.id)
+                published = await publish_one_event(
+                    channel,
+                    exchange,
+                    uow,
+                    event,
+                )
+                if published:
                     total_published += 1
-                except ValidationError as e:
-                    log.error("Permanent data validation error for event_id=%s: %s. Marking attempt.", event.id, e)
-                    await uow.outbox_repo.register_failed_attempt(
-                        event.id, settings.max_attempts
-                    )
-                except (
-                    aio_pika.exceptions.AMQPError,  # Базовый класс для всех ошибок aio-pika (ConnectionClosed, ChannelClosed)
-                    IOError,                        # Ошибки ввода-вывода (включая ConnectionResetError, BrokenPipeError)
-                    OSError,                        # Системные ошибки сокетов
-                    asyncio.TimeoutError,           # Таймаут ожидания подтверждения публикации
-                ) as net_err:
-                    log.critical(
-                        "Infrastructure error (RabbitMQ/Network) during publish: %s. Aborting entire job.",
-                        net_err
-                    )
-                    raise
-                except Exception as app_exc:
-                    log.warning("Publish failed for event_id=%s: %s", event.id, app_exc)
-                    await uow.outbox_repo.register_failed_attempt(
-                        event.id, settings.max_attempts
-                    )
 
     if total_published > 0:
         log.info("Successfully published %d total events in this run.", total_published)
