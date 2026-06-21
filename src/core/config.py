@@ -19,6 +19,7 @@ class RuntimeSettings(BaseModel):
     port: int = 8000
     reload: bool = True
 
+
 class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(ENV_TEMPLATE, ENV_FILE),
@@ -36,6 +37,7 @@ class DatabaseSettings(BaseSettings):
     @property
     def db_url(self):
         return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+
 
 class RedisSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -74,7 +76,7 @@ class CelerySettings(BaseModel):
 
     countdown_seconds: int = 10
     max_retries: int = 5
-    cron_tab: crontab = crontab(minute=0, hour="*") # каждый час в 00 минут
+    cron_tab: crontab = crontab(minute=0, hour="*")  # каждый час в 00 минут
 
 
 class LoggerSettings(BaseModel):
@@ -92,6 +94,7 @@ class ExternalApiSettings(BaseSettings):
 
     api_token: Annotated[str, Field(alias="PANDASCORE_API_TOKEN")]
     base_url: str = "https://api.pandascore.co"
+    timeout_seconds: int = 30
 
 
 class Settings(BaseSettings):
@@ -116,7 +119,9 @@ class Settings(BaseSettings):
     rabbitmq: RabbitMQSettings = Field(default_factory=RabbitMQSettings)
     celery: CelerySettings = CelerySettings()
 
+    api: ExternalApiSettings = Field(default_factory=ExternalApiSettings)
 
     max_retries_before_failed: int = 2
+
 
 settings = Settings()
