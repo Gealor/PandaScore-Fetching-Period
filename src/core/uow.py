@@ -38,3 +38,8 @@ class UnitOfWork:
 async def get_uow():
     uow = UnitOfWork(session_factory=async_session_maker)
     return uow
+
+async def get_uow_dep():
+    uow = UnitOfWork(session_factory=async_session_maker)
+    async with uow:
+        yield uow
