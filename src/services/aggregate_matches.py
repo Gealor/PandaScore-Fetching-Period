@@ -9,9 +9,10 @@ from aiohttp import ClientTimeout
 from pydantic import ValidationError
 
 from src.core.config import settings
-from src.core.database import async_session_maker
+from src.core.database import engine
 from src.core.logger import log
 from src.core.uow import UnitOfWork
+from src.core.uow import get_uow
 from src.integrations.pandascore_api import get_list_matches
 from src.schemas.exceptions.integration import BaseIntegrationException
 from src.schemas.pandascore.match_dto import MatchPostDTO
@@ -153,17 +154,20 @@ async def process_matches():
 
         try:
             # ЭТАП 1: Синхронизация данных.
-            async with UnitOfWork(session_factory=async_session_maker) as fetch_uow:
+            async with get_uow() as fetch_uow:
                 await fetch_and_store_new_matches(http_session, fetch_uow)
 
             # ЭТАП 2: Отправка событий.
             await publish_pending_events(channel, exchange)
 
             # ЭТАП 3: Очистка старых событий.
-            async with UnitOfWork(session_factory=async_session_maker) as clean_uow:
+            async with get_uow() as clean_uow:
                 cleanup_threshold = datetime.now(UTC) - timedelta(days=7)
                 await clean_uow.outbox_repo.delete_sent_before(cleanup_threshold)
 
         except Exception as e:
             log.exception("Job process_matches encountered a fatal error: %s", e)
             raise
+        finally:
+            await engine.dispose() # нужно, чтобы закрыть ВСЕ соединения в пуле, привязанных к текущему событийному циклу (event_loop), 
+            # т.к. в celery задаче мы создаем НОВЫЙ event_loop, а engine, session_maker объявлены на уровне модуля и не ИНИЦИАЛИЗИРУЮТСЯ ЛЕНИВО

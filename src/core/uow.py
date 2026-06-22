@@ -35,7 +35,7 @@ class UnitOfWork:
         await self.session.rollback()
 
 
-async def get_uow():
+def get_uow():
     uow = UnitOfWork(session_factory=async_session_maker)
     return uow
 
