@@ -1,3 +1,5 @@
+from aiohttp import ClientError
+
 from .base import AppBaseException
 
 
@@ -19,4 +21,8 @@ class FailedResponseCodeException(BaseIntegrationException):
 
 
 class UnexpectedResponseException(BaseIntegrationException):
-    pass
+    def __init__(self, exc: ClientError):
+        self.orig_exc = exc
+
+    def __str__(self):
+        return str(self.orig_exc)

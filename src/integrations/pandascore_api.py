@@ -35,6 +35,6 @@ async def get_list_matches(
         raise FailedResponseCodeException(e.status, e.message) from e
     except ClientError as e:
         log.error("Request to PandaScore failed: %s", e)
-        raise UnexpectedResponseException from e
+        raise UnexpectedResponseException(e) from e
 
     return result
