@@ -97,6 +97,9 @@ class ExternalApiSettings(BaseSettings):
     timeout_seconds: int = 30
     per_page: int = 100
 
+    attempts_for_retry: int = 5
+    backoff_factor: float = 2.0
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

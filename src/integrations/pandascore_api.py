@@ -6,11 +6,14 @@ from aiohttp import ClientSession
 
 from src.core.config import settings
 from src.core.logger import log
+from src.decorators import api_retry_decorator
 from src.schemas.exceptions.integration import FailedResponseCodeException
+from src.schemas.exceptions.integration import UnexpectedResponseException
 
 from .make_request import make_request
 
 
+@api_retry_decorator(attempts=settings.api.attempts_for_retry)
 async def get_list_matches(
     aiohttp_session: ClientSession,
     url: str = f"{settings.api.base_url}/matches",
@@ -29,9 +32,9 @@ async def get_list_matches(
         )
     except ClientResponseError as e:
         log.error("Failed response: code=%s, detail=%s", e.status, e.message)
-        raise FailedResponseCodeException from e
+        raise FailedResponseCodeException(e.status, e.message) from e
     except ClientError as e:
         log.error("Request to PandaScore failed: %s", e)
-        raise FailedResponseCodeException from e
+        raise UnexpectedResponseException from e
 
     return result
