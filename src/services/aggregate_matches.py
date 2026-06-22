@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
@@ -14,10 +13,11 @@ from src.core.database import async_session_maker
 from src.core.logger import log
 from src.core.uow import UnitOfWork
 from src.integrations.pandascore_api import get_list_matches
-from src.models.outbox_event import OutboxEvent
+from src.schemas.exceptions.integration import BaseIntegrationException
 from src.schemas.pandascore.match_dto import MatchPostDTO
-from src.utils.publish_event import get_exchange
-from src.utils.publish_event import publish_match
+from src.schemas.result_model import BatchProcessingResult
+from src.services.publishing_events import publish_pending_events
+from src.utils.aiopika_publishing import get_exchange
 
 
 def validate_match_json(raw: dict[str, Any]) -> MatchPostDTO | None:
@@ -41,8 +41,56 @@ async def get_or_create_cursor(uow: UnitOfWork) -> datetime:
     await uow.commit()
     return created.last_modified_at
 
+async def update_cursor(
+    total_events: int,
+    max_modified_at: datetime,
+    uow: UnitOfWork,
+) -> None:
+    if total_events > 0:
+        await uow.cursor_repo.update_cursor(max_modified_at, settings.cursor_name)
+        log.info(
+            "Successfully fetched %d new matches and updated cursor to %s",
+            total_events,
+            max_modified_at,
+        )
+    else:
+        log.info("No new matches found.")
 
-# TODO: декомпозировать, слишком тяжелая функция
+
+async def process_match_batch(
+    batch: list[dict[str, Any]],
+    fetch_since: datetime,
+    current_max_modified: datetime,
+    uow: UnitOfWork,
+) -> BatchProcessingResult:
+    new_events_count = 0
+    max_modified = current_max_modified
+    reached_old_data = False
+
+    for raw in batch:
+        match = validate_match_json(raw)
+        if not match:
+            continue
+
+        if match.modified_at <= fetch_since:
+            reached_old_data = True
+            break
+
+        await uow.outbox_repo.create_event(
+            match.external_id, match.model_dump(mode="json")
+        )
+        new_events_count += 1
+
+        if match.modified_at > max_modified:
+            max_modified = match.modified_at
+
+    return BatchProcessingResult(
+        new_events_count=new_events_count,
+        max_modified_in_batch=max_modified,
+        reached_old_data=reached_old_data,
+    )
+
+
 async def fetch_and_store_new_matches(
     http_session: ClientSession,
     uow: UnitOfWork,
@@ -52,118 +100,44 @@ async def fetch_and_store_new_matches(
 
     page = 1
     max_modified = since
-    new_events_count = 0
+    total_new_events = 0
     reached_old_data = False
 
     while not reached_old_data:
         log.info("Fetching API page #%d...", page)
-        batch = await get_list_matches(
-            http_session, page=page, per_page=settings.api.per_page
-        )
+        try:
+            batch = await get_list_matches(
+                http_session, page=page, per_page=settings.api.per_page
+            )
+        except BaseIntegrationException as e:
+            log.error(
+                "PandaScore API Error: Failed to fetch page #%d. "
+                "Skipping this page and attempting to request the next one. Detail: %s",
+                page,
+                e,
+            )
+            page += 1
+            continue
 
         if not batch:
             break
 
-        for raw in batch:
-            match = validate_match_json(raw)
-            if not match:
-                continue
+        result = await process_match_batch(
+            batch=batch,
+            fetch_since=fetch_since,
+            current_max_modified=max_modified,
+            uow=uow
+        )
 
-            if match.modified_at <= fetch_since: # Нашли запись, которая старше курсора
-                reached_old_data = True
-                break
+        total_new_events += result.new_events_count
+        max_modified = result.max_modified_in_batch
 
-            await uow.outbox_repo.create_event(
-                match.external_id, match.model_dump(mode="json")
-            )
-            new_events_count += 1
-
-            if match.modified_at > max_modified:
-                max_modified = match.modified_at
-
-        if len(batch) < settings.api.per_page: # последняя страница
+        if result.reached_old_data or len(batch) < settings.api.per_page:  # последняя страница
             break
 
         page += 1
 
-    if new_events_count > 0:
-        await uow.cursor_repo.update_cursor(max_modified, settings.cursor_name)
-        log.info(
-            "Successfully fetched %d new matches and updated cursor to %s",
-            new_events_count,
-            max_modified,
-        )
-    else:
-        log.info("No new matches found.")
-
-
-async def publish_one_event(
-    channel: aio_pika.abc.AbstractChannel,
-    exchange: aio_pika.abc.AbstractExchange,
-    uow: UnitOfWork,
-    event: OutboxEvent
-) -> bool:
-    try:
-        match = MatchPostDTO.model_validate(event.payload)
-        await publish_match(channel, exchange, match)
-        await uow.outbox_repo.mark_sent(event.id)
-    except ValidationError as e:
-        log.error("Permanent data validation error for event_id=%s: %s. Marking attempt.", event.id, e)
-        await uow.outbox_repo.register_failed_attempt(
-            event.id, settings.max_attempts
-        )
-        return False
-    except (
-        aio_pika.exceptions.AMQPError,  # Базовый класс для всех ошибок aio-pika (ConnectionClosed, ChannelClosed)
-        IOError,                        # Ошибки ввода-вывода (включая ConnectionResetError, BrokenPipeError)
-        OSError,                        # Системные ошибки сокетов
-        asyncio.TimeoutError,           # Таймаут ожидания подтверждения публикации
-    ) as net_err:
-        log.critical(
-            "Infrastructure error (RabbitMQ/Network) during publish: %s. Aborting entire job.",
-            net_err
-        )
-        raise
-    except Exception as app_exc:
-        log.warning("Publish failed for event_id=%s: %s", event.id, app_exc)
-        await uow.outbox_repo.register_failed_attempt(
-            event.id, settings.max_attempts
-        )
-        return False
-
-    return True
-
-# (СДЕЛАНО) TODO: сделать так, что если ошибка случилась по вине инфраструктуры (упал брокер или что-то такое), то мы НЕ инкрементируем попытки, а просто логируем критическим уровнем и прерываем задачу полностью
-async def publish_pending_events(
-    channel: aio_pika.abc.AbstractChannel,
-    exchange: aio_pika.abc.AbstractExchange,
-    batch_size: int = 100,
-) -> None:
-    total_published = 0
-
-    while True:
-        async with UnitOfWork(session_factory=async_session_maker) as uow:
-            pending_events = await uow.outbox_repo.get_retriable_events(
-                settings.max_attempts, limit=batch_size
-            )
-
-            if not pending_events:
-                break
-
-            log.info("Publishing batch of %d pending events...", len(pending_events))
-
-            for event in pending_events:
-                published = await publish_one_event(
-                    channel,
-                    exchange,
-                    uow,
-                    event,
-                )
-                if published:
-                    total_published += 1
-
-    if total_published > 0:
-        log.info("Successfully published %d total events in this run.", total_published)
+    await update_cursor(total_events=total_new_events, max_modified_at=max_modified, uow=uow)
 
 
 async def process_matches():

@@ -16,7 +16,6 @@ async def get_exchange(
 
 
 async def publish(
-    channel: aio_pika.abc.AbstractChannel,
     object: str,
     exchange: aio_pika.abc.AbstractExchange,
     routing_key: str,
@@ -31,12 +30,10 @@ async def publish(
 
 
 async def publish_match(
-    channel: aio_pika.abc.AbstractChannel,
     exchange: aio_pika.abc.AbstractExchange,
     match: MatchPostDTO,
 ) -> None:
     await publish(
-        channel=channel,
         object=match.model_dump_json(),
         exchange=exchange,
         routing_key=settings.routing_key,
