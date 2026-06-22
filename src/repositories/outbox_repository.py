@@ -2,6 +2,7 @@ from datetime import UTC
 from datetime import datetime
 from typing import Sequence
 
+from sqlalchemy import Select
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy import update
@@ -19,6 +20,57 @@ from src.schemas.exceptions.outbox_event import OutboxEventNotFoundException
 class OutboxEventRepository:
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
+
+    async def _paginated_result(self, stmt: Select, page: int, per_page: int):
+        return stmt.offset((page-1) * per_page).limit(per_page)
+
+    async def get_all_events(
+        self,
+        page: int,
+        per_page: int
+    ) -> Sequence[OutboxEvent]:
+        stmt = select(OutboxEvent).order_by(OutboxEvent.id.asc())
+
+        stmt = await self._paginated_result(stmt, page=page, per_page=per_page)
+
+        result = await self.db_session.scalars(stmt)
+        return result.all()
+
+    async def get_events_by_status(
+        self,
+        page: int,
+        per_page: int,
+        status: StatusEnum
+    ) -> Sequence[OutboxEvent]:
+        stmt = (
+            select(OutboxEvent).where(OutboxEvent.status == status)
+            .order_by(OutboxEvent.id.asc())
+        )
+
+        stmt = await self._paginated_result(stmt, page=page, per_page=per_page)
+
+        result = await self.db_session.scalars(stmt)
+        return result.all()
+
+    async def update_status_by_id(self, id: int, status: StatusEnum) -> OutboxEvent:
+        stmt = (
+            update(OutboxEvent).values(status=status)
+            .where(OutboxEvent.id == id)
+            .returning(OutboxEvent)
+        )
+        try:
+            event = await self.db_session.scalar(stmt)
+        except IntegrityError as e:
+            log.error("Failed to mark outbox event as sent: %s", e)
+            raise DatabaseException from e
+
+        if event is None:
+            raise OutboxEventNotFoundException
+
+        log.info("Outbox event marked as sent: id=%s", event.id)
+        return event
+
+
 
     async def get_by_id(self, event_id: int) -> OutboxEvent | None:
         stmt = select(OutboxEvent).where(OutboxEvent.id == event_id)
@@ -116,3 +168,4 @@ class OutboxEventRepository:
 
         log.info("Deleted %s sent outbox events older than %s", len(result), before)
         return len(result)
+

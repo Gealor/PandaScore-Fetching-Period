@@ -73,7 +73,7 @@ class RabbitMQSettings(BaseSettings):
 
 
 class CelerySettings(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True) # разрешить сторонние типы данных, помимо моделей pydantic и примитивов.
 
     countdown_seconds: int = 10
     cron_tab: crontab = crontab(minute=00, hour="*")  # каждый час в 00 минут
