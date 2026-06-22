@@ -17,16 +17,16 @@ class UnitOfWork:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            await self.rollback()
-        else:
-            try:
-                await self.commit()
-            except Exception as e:
+        try:
+            if exc_type is not None:
                 await self.rollback()
-                raise e
-
-        await self.session.close()
+            else:
+                await self.commit()
+        except Exception as e:
+            await self.rollback()
+            raise e
+        finally: # гарантированное закрытие соединения
+            await self.session.close()
 
     async def commit(self):
         await self.session.commit()
