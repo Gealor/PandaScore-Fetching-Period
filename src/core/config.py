@@ -77,6 +77,7 @@ class CelerySettings(BaseModel):
 
     countdown_seconds: int = 10
     cron_tab: crontab = crontab(minute=00, hour="*")  # каждый час в 00 минут
+    expired_seconds: int = 120
 
 
 class LoggerSettings(BaseModel):

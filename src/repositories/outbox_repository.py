@@ -21,7 +21,7 @@ class OutboxEventRepository:
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
 
-    async def _paginated_result(self, stmt: Select, page: int, per_page: int):
+    def _paginated_result(self, stmt: Select, page: int, per_page: int):
         return stmt.offset((page-1) * per_page).limit(per_page)
 
     async def get_all_events(
@@ -31,7 +31,7 @@ class OutboxEventRepository:
     ) -> Sequence[OutboxEvent]:
         stmt = select(OutboxEvent).order_by(OutboxEvent.id.asc())
 
-        stmt = await self._paginated_result(stmt, page=page, per_page=per_page)
+        stmt = self._paginated_result(stmt, page=page, per_page=per_page)
 
         result = await self.db_session.scalars(stmt)
         return result.all()
@@ -47,7 +47,7 @@ class OutboxEventRepository:
             .order_by(OutboxEvent.id.asc())
         )
 
-        stmt = await self._paginated_result(stmt, page=page, per_page=per_page)
+        stmt = self._paginated_result(stmt, page=page, per_page=per_page)
 
         result = await self.db_session.scalars(stmt)
         return result.all()
@@ -87,6 +87,7 @@ class OutboxEventRepository:
             )
             .order_by(OutboxEvent.created_at)
             .limit(limit)
+            .with_for_update(skip_locked=True) # блокируем строки для обновления. Если какая-то транзакция параллельно попытается взять заблокированные строки, то она просто их пропустит
         )
         result = await self.db_session.scalars(stmt)
         return result.all()

@@ -16,6 +16,7 @@ def prepare_celery() -> Celery:
         "fetch_matches": {
             "task": "src.tasks.pandascore_fetch.fetch_matches",
             "schedule": settings.celery.cron_tab,
+            "options": {"expires": settings.celery.expired_seconds}, # задача, протухает если не взята за ... секунд
         }
     }
 
