@@ -113,12 +113,11 @@ async def fetch_and_store_new_matches(
         except BaseIntegrationException as e:
             log.error(
                 "PandaScore API Error: Failed to fetch page #%d. "
-                "Skipping this page and attempting to request the next one. Detail: %s",
+                "Detail: %s",
                 page,
                 e,
             )
-            page += 1
-            continue
+            raise
 
         if not batch:
             break
