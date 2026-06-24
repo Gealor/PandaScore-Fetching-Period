@@ -8,7 +8,7 @@ async def get_exchange(
     channel: aio_pika.abc.AbstractChannel,
     exchange_name: str,
 ) -> aio_pika.abc.AbstractExchange:
-    return await channel.declare_exchange(
+    return await channel.declare_exchange( # действие идемпотентно, т.е. если обменник (exchange) с таким именем и параметрами существует, то он вернет уже существующий объект и не будет создавать новый обменник
         exchange_name,
         type=aio_pika.ExchangeType.TOPIC,
         durable=True,
