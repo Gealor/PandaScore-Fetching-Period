@@ -157,7 +157,7 @@ async def process_matches():
                 await fetch_and_store_new_matches(http_session, fetch_uow)
 
             # ЭТАП 2: Отправка событий.
-            await publish_pending_events(channel, exchange)
+            await publish_pending_events(exchange)
 
             # ЭТАП 3: Очистка старых событий.
             async with get_uow() as clean_uow:

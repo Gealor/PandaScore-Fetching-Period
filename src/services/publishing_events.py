@@ -13,7 +13,6 @@ from src.utils.aiopika_publishing import publish_match
 
 
 async def publish_one_event(
-    channel: aio_pika.abc.AbstractChannel,
     exchange: aio_pika.abc.AbstractExchange,
     uow: UnitOfWork,
     event: OutboxEvent
@@ -50,7 +49,6 @@ async def publish_one_event(
 
 # (СДЕЛАНО) TODO: сделать так, что если ошибка случилась по вине инфраструктуры (упал брокер или что-то такое), то мы НЕ инкрементируем попытки, а просто логируем критическим уровнем и прерываем задачу полностью
 async def publish_pending_events(
-    channel: aio_pika.abc.AbstractChannel,
     exchange: aio_pika.abc.AbstractExchange,
     batch_size: int = 100,
 ) -> None:
@@ -70,7 +68,6 @@ async def publish_pending_events(
 
             for event in pending_events:
                 published = await publish_one_event(
-                    channel,
                     exchange,
                     uow,
                     event,
