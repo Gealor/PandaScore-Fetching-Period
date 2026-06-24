@@ -25,7 +25,7 @@ async def publish(
             body=object.encode(),
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         ),
-        routing_key=routing_key,
+        routing_key=routing_key, # ключ маршрутизации (routing_key) прикладывается именно к сообщению, потом обменник (exchange) смотрит на этот ключ в сообщении и определяет в какую очередь (queque) пойдет сообщение
     )
 
 
