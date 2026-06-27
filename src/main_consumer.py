@@ -5,7 +5,6 @@ import aio_pika
 from src.core.config import settings
 from src.core.logger import log
 
-# Замените эти значения на те, что у вас в src.core.config (settings)
 RABBITMQ_URL = settings.rabbitmq.rabbitmq_url
 EXCHANGE_NAME = settings.exchange_name
 ROUTING_KEY = settings.routing_key
