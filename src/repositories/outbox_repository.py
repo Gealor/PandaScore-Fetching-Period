@@ -156,7 +156,7 @@ class OutboxEventRepository:
             delete(OutboxEvent)
             .where(
                 OutboxEvent.status == StatusEnum.sent,
-                OutboxEvent.sent_at < before,
+                OutboxEvent.sent_at < before, # сравнивать даты (datetime) как если бы они были в формате timestamp (количество секунд от эпохи UNIX), т.е. чем свежее дата, чем больше у нее количество секунд с эпохи UNIX
             )
             .returning(OutboxEvent.id)
         )
