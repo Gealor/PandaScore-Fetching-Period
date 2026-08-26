@@ -167,6 +167,6 @@ async def process_matches():
         except Exception as e:
             log.exception("Job process_matches encountered a fatal error: %s", e)
             raise
-        finally:
-            await engine.dispose() # нужно, чтобы закрыть ВСЕ соединения в пуле, чтобы избавиться от соедниений, привязанных к текущему событийному циклу (event_loop),
-            # т.к. в celery задаче мы создаем НОВЫЙ event_loop, а engine, session_maker объявлены на уровне модуля и не ИНИЦИАЛИЗИРУЮТСЯ ЛЕНИВО
+        # finally:
+        #     await engine.dispose() # нужно, чтобы закрыть ВСЕ соединения в пуле, чтобы избавиться от соедниений, привязанных к текущему событийному циклу (event_loop),
+        #     # т.к. в celery задаче мы создаем НОВЫЙ event_loop, а engine, session_maker объявлены на уровне модуля и не ИНИЦИАЛИЗИРУЮТСЯ ЛЕНИВО
