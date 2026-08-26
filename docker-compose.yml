@@ -20,7 +20,7 @@ services:
         condition: service_healthy
 
   db:
-    image: postgres
+    image: postgres:17
     env_file:
       - .env
     ports:
@@ -61,7 +61,7 @@ services:
   
   celery_worker:
     build: .
-    command: uv run celery --app src.core.celery worker --loglevel=info
+    command: uv run celery --app src.core.celery worker --pool=threads --concurrency=4 --loglevel=info
     env_file:
       - .env
     networks:
